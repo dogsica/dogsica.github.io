@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>OAuth Callback</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+body{font-family:system-ui,sans-serif;max-width:720px;margin:3rem auto;padding:0 1rem;line-height:1.5;color:#222}
+code{display:block;background:#f4f4f4;padding:1rem;border-radius:6px;word-break:break-all;font-size:0.95rem}
+.label{font-size:0.85rem;color:#666;text-transform:uppercase;letter-spacing:0.05em;margin-top:1.5rem}
+button{margin-top:0.75rem;padding:0.5rem 1rem;border:0;border-radius:6px;background:#fe2c55;color:#fff;cursor:pointer;font-size:0.95rem}
+.err{color:#b00020}
+</style>
+</head>
+<body>
+<h1>TikTok Authorization Result</h1>
+<div id="out">Reading parameters…</div>
+<script>
+(function(){
+  const p = new URLSearchParams(window.location.search);
+  const code = p.get('code');
+  const state = p.get('state');
+  const err = p.get('error');
+  const errDesc = p.get('error_description');
+  const out = document.getElementById('out');
+  if (err) {
+    out.innerHTML = '<p class="err"><strong>Error:</strong> ' + err +
+      (errDesc ? ' &mdash; ' + errDesc : '') + '</p>';
+    return;
+  }
+  if (!code) { out.textContent = 'No code parameter present in URL.'; return; }
+  out.innerHTML =
+    '<p>Authorization succeeded. Copy the code below and paste it into your Apps Script ' +
+    '<code>completeOAuth</code> function.</p>' +
+    '<div class="label">Authorization code</div>' +
+    '<code id="c">' + code + '</code>' +
+    '<button onclick="navigator.clipboard.writeText(document.getElementById(\'c\').textContent)">Copy code</button>' +
+    (state ? '<div class="label">State</div><code>' + state + '</code>' : '');
+})();
+</script>
+</body>
+</html>
