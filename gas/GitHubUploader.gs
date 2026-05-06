@@ -162,3 +162,95 @@ function uploadBlobToGitHub_(blob, repoPath, commitMessage) {
     throw new Error("GitHub upload failed (" + r.getResponseCode() + "): " + r.getContentText());
   }
 }
+
+
+/**
+ * Delete all comic files from GitHub for dates strictly before today.
+ * Walks comics/<YYYY-MM-DD>/AM/ and /PM/ and deletes every file it finds.
+ * Returns the total number of files deleted.
+ */
+function deleteOldComicsFromGitHub_() {
+  const cfg = gh_props_();
+  const today = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd");
+  const base = "https://api.github.com/repos/" + cfg.GITHUB_OWNER + "/" + cfg.GITHUB_REPO + "/contents/";
+  const headers = {
+    "Authorization": "Bearer " + cfg.GITHUB_PAT,
+    "Accept": "application/vnd.github+json",
+    "X-GitHub-Api-Version": "2022-11-28"
+  };
+
+  // List all entries in comics/
+  const rootResp = UrlFetchApp.fetch(base + "comics?ref=" + encodeURIComponent(cfg.GITHUB_BRANCH), {
+    method: "get", headers: headers, muteHttpExceptions: true
+  });
+  if (rootResp.getResponseCode() === 404) {
+    Logger.log("comics/ not found — nothing to clean up.");
+    return 0;
+  }
+  if (rootResp.getResponseCode() !== 200) {
+    throw new Error("Failed to list comics/: " + rootResp.getResponseCode() + " " + rootResp.getContentText());
+  }
+
+  const dateFolders = JSON.parse(rootResp.getContentText());
+  let totalDeleted = 0;
+
+  for (let i = 0; i < dateFolders.length; i++) {
+    const entry = dateFolders[i];
+    if (entry.type !== "dir") continue;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(entry.name)) continue;
+    if (entry.name >= today) {
+      Logger.log("Keeping " + entry.name + " (today or future)");
+      continue;
+    }
+
+    Logger.log("Cleaning up comics/" + entry.name + " ...");
+
+    // List AM / PM slot folders inside the date folder
+    const slotResp = UrlFetchApp.fetch(base + "comics/" + entry.name + "?ref=" + encodeURIComponent(cfg.GITHUB_BRANCH), {
+      method: "get", headers: headers, muteHttpExceptions: true
+    });
+    if (slotResp.getResponseCode() !== 200) continue;
+
+    const slots = JSON.parse(slotResp.getContentText());
+
+    for (let j = 0; j < slots.length; j++) {
+      const slot = slots[j];
+      if (slot.type !== "dir") continue;
+
+      // List individual image files in the slot folder
+      const filesResp = UrlFetchApp.fetch(base + "comics/" + entry.name + "/" + slot.name + "?ref=" + encodeURIComponent(cfg.GITHUB_BRANCH), {
+        method: "get", headers: headers, muteHttpExceptions: true
+      });
+      if (filesResp.getResponseCode() !== 200) continue;
+
+      const files = JSON.parse(filesResp.getContentText());
+
+      for (let k = 0; k < files.length; k++) {
+        const file = files[k];
+        if (file.type !== "file") continue;
+
+        const delResp = UrlFetchApp.fetch(base + file.path, {
+          method: "delete",
+          contentType: "application/json",
+          headers: headers,
+          payload: JSON.stringify({
+            message: "cleanup " + file.path,
+            sha: file.sha,
+            branch: cfg.GITHUB_BRANCH
+          }),
+          muteHttpExceptions: true
+        });
+
+        if (delResp.getResponseCode() >= 200 && delResp.getResponseCode() < 300) {
+          Logger.log("  Deleted: " + file.path);
+          totalDeleted++;
+        } else {
+          Logger.log("  FAILED: " + file.path + " (" + delResp.getResponseCode() + ")");
+        }
+      }
+    }
+  }
+
+  Logger.log("Cleanup complete. Deleted " + totalDeleted + " files.");
+  return totalDeleted;
+}

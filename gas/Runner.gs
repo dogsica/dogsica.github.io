@@ -173,6 +173,12 @@ function runEveningPublishStep2() {
   }
 }
 
+/** Daily cleanup: delete comic images from GitHub older than today. */
+function runDailyCleanup() {
+  const count = deleteOldComicsFromGitHub_();
+  Logger.log("runDailyCleanup: removed " + count + " files from GitHub.");
+}
+
 /** Pre-flight check: confirms every Script Property is set and APIs respond. */
 function preflight() {
   console.log('--- GitHub ---');
@@ -368,7 +374,7 @@ function diagInspectTodaysImages() {
  * Times are interpreted in the project's timezone (Eastern Time).
  */
 function setupDailyTriggers() {
-  const handlers = ['runMorningPublish', 'runEveningPublish'];
+  const handlers = ['runMorningPublish', 'runEveningPublish', 'runDailyCleanup'];
   const all = ScriptApp.getProjectTriggers();
   for (let i = 0; i < all.length; i++) {
     const h = all[i].getHandlerFunction();
@@ -395,4 +401,13 @@ function setupDailyTriggers() {
     .inTimezone('America/New_York')
     .create();
   Logger.log('Created daily trigger: runEveningPublish at 6–7 PM ET');
+
+  // Daily 2–3 AM ET cleanup: delete GitHub comic images older than today.
+  ScriptApp.newTrigger('runDailyCleanup')
+    .timeBased()
+    .atHour(2)
+    .everyDays(1)
+    .inTimezone('America/New_York')
+    .create();
+  Logger.log('Created daily trigger: runDailyCleanup at 2–3 AM ET');
 }
